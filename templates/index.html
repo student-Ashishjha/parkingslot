@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPark - Vehicle Parking Management</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f8f9fa; color: #333; padding: 15px; }
+        .container { max-width: 1000px; margin: 0 auto; }
+        header { background: linear-gradient(120deg, #64b5f6, #2196f3); padding: 15px; border-radius: 8px; display: flex; justify-content: space-between; color: white; margin-bottom: 15px; box-shadow: 0 4px 12px rgba(33,150,243,0.2); }
+        .layout { display: flex; gap: 15px; flex-wrap: wrap; }
+        .card { background: white; border-radius: 8px; padding: 15px; margin-bottom: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        .booking-form { flex: 1; min-width: 240px; }
+        .slots-view { flex: 2; min-width: 240px; }
+        h2 { margin-bottom: 12px; color: #2196f3; }
+        .form-group { margin-bottom: 12px; }
+        label { display: block; margin-bottom: 5px; color: #555; }
+        select, input { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 4px; outline: none; }
+        select:focus, input:focus { border-color: #2196f3; }
+        button { background: linear-gradient(120deg, #64b5f6, #2196f3); color: white; border: none; border-radius: 4px; padding: 8px 15px; cursor: pointer; }
+        button:hover { opacity: 0.9; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .parking-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; margin-top: 12px; }
+        .spot { border-radius: 6px; padding: 10px; height: 90px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; text-align: center; }
+        .spot:hover { transform: translateY(-2px); }
+        .spot.available { background: linear-gradient(120deg, #81c784, #4caf50); color: white; }
+        .spot.occupied { background: linear-gradient(120deg, #ff8a80, #f44336); color: white; }
+        .spot.reserved { background: linear-gradient(120deg, #ffcc80, #ff9800); color: white; }
+        .price-info { background: #e3f2fd; padding: 10px; border-radius: 4px; margin-top: 12px; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; z-index: 100; }
+        .modal-content { background: white; border-radius: 8px; padding: 20px; position: relative; width: 90%; max-width: 380px; }
+        .close-btn { position: absolute; top: 10px; right: 15px; font-size: 22px; cursor: pointer; color: #777; }
+        .toast { position: fixed; bottom: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; color: white; display: none; z-index: 1000; }
+        .toast.success { background: linear-gradient(120deg, #81c784, #4caf50); }
+        .toast.error { background: linear-gradient(120deg, #ff8a80, #f44336); }
+        .dashboard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px; }
+        .stat-card { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); text-align: center; }
+        .stat-value { font-size: 28px; font-weight: bold; margin: 5px 0; color: #2196f3; }
+        .stat-label { color: #666; font-size: 14px; }
+        .ticket { background: #f5f5f5; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px dashed #bdbdbd; }
+        .search-bar { display: flex; gap: 10px; margin-bottom: 15px; }
+        .search-bar input { flex: 1; }
+        @media (max-width: 600px) { .layout { flex-direction: column; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div>
+                <h1>SmartPark</h1>
+                <div>Welcome, <span id="username">User</span></div>
+            </div>
+            <button id="logout-btn">Logout</button>
+        </header>
+
+        <div class="dashboard">
+            <div class="stat-card"><div class="stat-label">Available Spots</div><div class="stat-value" id="available-count">0</div></div>
+            <div class="stat-card"><div class="stat-label">Occupied Spots</div><div class="stat-value" id="occupied-count">0</div></div>
+            <div class="stat-card"><div class="stat-label">Reserved Spots</div><div class="stat-value" id="reserved-count">0</div></div>
+            <div class="stat-card"><div class="stat-label">Total Revenue</div><div class="stat-value" id="revenue">$0</div></div>
+        </div>
+
+        <div class="search-bar">
+            <input type="text" id="search-input" placeholder="Search by license plate or spot #">
+            <button id="search-btn">Search</button>
+        </div>
+
+        <div class="layout">
+            <div class="card booking-form">
+                <h2>Park a Vehicle</h2>
+                <div class="form-group">
+                    <label for="vehicle-type">Vehicle Type</label>
+                    <select id="vehicle-type"><option value="">Select type</option><option value="car">Car</option><option value="motorcycle">Motorcycle</option><option value="truck">Truck/SUV</option></select>
+                </div>
+                <div class="form-group"><label for="license-plate">License Plate</label><input type="text" id="license-plate"></div>
+                <div class="form-group"><label for="spot">Parking Spot</label><select id="spot"><option value="">Select spot</option></select></div>
+                <div class="form-group"><label for="entry-time">Entry Time</label><input type="datetime-local" id="entry-time"></div>
+                <div class="form-group"><label for="duration">Expected Duration (hours)</label><input type="number" id="duration" min="1" max="24"></div>
+                <div class="price-info" id="price-info">Select vehicle type and duration to see price</div>
+                <button id="park-btn" disabled>Park Now</button>
+            </div>
+
+            <div class="card slots-view">
+                <h2>Parking Spots</h2>
+                <div class="parking-grid" id="parking-grid"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="spot-modal">
+        <div class="modal-content">
+            <span class="close-btn" id="close-modal">×</span>
+            <h2>Spot Details</h2>
+            <div id="modal-content"></div>
+            <div id="ticket-container"></div>
+            <button id="checkout-btn" style="margin-top: 15px; display: none;">Checkout Vehicle</button>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+    <script>
+        const state = {
+            user: 'Admin User',
+            spots: {},
+            currentModalSpot: null,
+            revenue: 0,
+            rates: { car: 5, motorcycle: 3, truck: 8 }
+        };
+
+        const $ = id => document.getElementById(id);
+        const els = {
+            username: $('username'), vehicleType: $('vehicle-type'), licensePlate: $('license-plate'),
+            spot: $('spot'), entryTime: $('entry-time'), duration: $('duration'), priceInfo: $('price-info'),
+            parkBtn: $('park-btn'), parkingGrid: $('parking-grid'), modal: $('spot-modal'),
+            modalContent: $('modal-content'), ticketContainer: $('ticket-container'), checkoutBtn: $('checkout-btn'),
+            toast: $('toast'), availableCount: $('available-count'), occupiedCount: $('occupied-count'),
+            reservedCount: $('reserved-count'), revenue: $('revenue'), searchInput: $('search-input'),
+            searchBtn: $('search-btn'), logoutBtn: $('logout-btn')
+        };
+
+        // Helper functions
+        const capitalize = str => str && (str.charAt(0).toUpperCase() + str.slice(1));
+        const formatDateTime = date => date.toLocaleString([], {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'});
+        const calculateFee = spot => spot.rate * spot.duration;
+        const showToast = (message, type) => {
+            els.toast.textContent = message;
+            els.toast.className = `toast ${type}`;
+            els.toast.style.display = 'block';
+            setTimeout(() => els.toast.style.display = 'none', 3000);
+        };
+
+        // Function to handle logout
+        function handleLogout() {
+            // Show a logout confirmation message
+            showToast('Logging out...', 'success');
+
+            // Redirect to the logout route after a short delay
+            setTimeout(() => {
+                window.location.href = '/logout';
+            }, 1000);
+        }
+
+        function initSpots() {
+            const now = new Date();
+            for (let i = 1; i <= 16; i++) {
+                const randomStatus = Math.random();
+                let status = 'available', vehicleType = null, licensePlate = null, entryTime = null, duration = null;
+
+                if (randomStatus < 0.4) {
+                    status = 'occupied';
+                    vehicleType = ['car', 'motorcycle', 'truck'][Math.floor(Math.random() * 3)];
+                    licensePlate = ['ABC', 'XYZ', 'DEF'][Math.floor(Math.random() * 3)] + Math.floor(Math.random() * 900 + 100);
+                    entryTime = new Date(now.getTime() - 1000*60*60*Math.floor(Math.random() * 5));
+                    duration = Math.floor(Math.random() * 8) + 1;
+                } else if (randomStatus < 0.6) {
+                    status = 'reserved';
+                    vehicleType = ['car', 'motorcycle', 'truck'][Math.floor(Math.random() * 3)];
+                    licensePlate = ['JKL', 'MNO', 'PQR'][Math.floor(Math.random() * 3)] + Math.floor(Math.random() * 900 + 100);
+                    entryTime = new Date(now.getTime() + 1000*60*60*Math.floor(Math.random() * 2));
+                    duration = Math.floor(Math.random() * 8) + 1;
+                }
+
+                state.spots[i] = {
+                    id: i, status, vehicleType, licensePlate,
+                    entryTime: status !== 'available' ? entryTime.toISOString() : null,
+                    duration, rate: vehicleType ? state.rates[vehicleType] : null
+                };
+
+                if (status === 'occupied') state.revenue += calculateFee(state.spots[i]);
+            }
+        }
+
+        function renderSpots() {
+            els.parkingGrid.innerHTML = '';
+            Object.values(state.spots).forEach(spot => {
+                const el = document.createElement('div');
+                el.className = `spot ${spot.status}`;
+
+                let icon = '🅿️';
+                if (spot.vehicleType === 'car') icon = '🚗';
+                else if (spot.vehicleType === 'motorcycle') icon = '🏍️';
+                else if (spot.vehicleType === 'truck') icon = '🚙';
+
+                el.innerHTML = `<div class="vehicle-icon">${icon}</div><div><b>Spot ${spot.id}</b></div><div>${capitalize(spot.status)}</div>`;
+                el.onclick = () => showSpotDetails(spot.id);
+                els.parkingGrid.appendChild(el);
+            });
+        }
+
+        function updateSpotDropdown() {
+            els.spot.innerHTML = '<option value="">Select spot</option>';
+            Object.values(state.spots)
+                .filter(spot => spot.status === 'available')
+                .forEach(spot => {
+                    els.spot.innerHTML += `<option value="${spot.id}">Spot ${spot.id}</option>`;
+                });
+            validateForm();
+        }
+
+        function showSpotDetails(id) {
+            const spot = state.spots[id];
+            state.currentModalSpot = id;
+
+            els.modalContent.innerHTML = `
+                <p><b>Spot:</b> ${spot.id}</p>
+                <p><b>Status:</b> ${capitalize(spot.status)}</p>
+                ${spot.status !== 'available' ? `
+                    <p><b>Vehicle Type:</b> ${capitalize(spot.vehicleType)}</p>
+                    <p><b>License Plate:</b> ${spot.licensePlate}</p>
+                    <p><b>Entry Time:</b> ${formatDateTime(new Date(spot.entryTime))}</p>
+                    <p><b>Duration:</b> ${spot.duration} hour(s)</p>
+                    <p><b>Hourly Rate:</b> $${spot.rate}</p>
+                    <p><b>Total Fee:</b> $${(spot.rate * spot.duration).toFixed(2)}</p>
+                ` : ''}
+            `;
+
+            els.checkoutBtn.style.display = spot.status === 'occupied' ? 'block' : 'none';
+
+            if (spot.status === 'occupied') generateTicket(spot);
+            else els.ticketContainer.innerHTML = '';
+
+            els.modal.style.display = 'flex';
+        }
+
+        function generateTicket(spot) {
+            const entryTime = new Date(spot.entryTime);
+            const exitTime = new Date(entryTime.getTime() + spot.duration * 60 * 60 * 1000);
+            const fee = calculateFee(spot);
+
+            els.ticketContainer.innerHTML = `
+                <div class="ticket">
+                    <h3 style="text-align:center;margin-bottom:10px">PARKING TICKET</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+                        <p><b>Spot:</b> ${spot.id}</p>
+                        <p><b>Vehicle:</b> ${capitalize(spot.vehicleType)}</p>
+                        <p><b>Plate:</b> ${spot.licensePlate}</p>
+                        <p><b>Rate:</b> $${spot.rate}/hr</p>
+                        <p><b>Entry:</b> ${formatDateTime(entryTime)}</p>
+                        <p><b>Exit:</b> ${formatDateTime(exitTime)}</p>
+                    </div>
+                    <p style="text-align:center;margin-top:10px"><b>Total Fee: $${fee.toFixed(2)}</b></p>
+                </div>
+            `;
+        }
+
+        function validateForm() {
+            const isValid = els.vehicleType.value && els.licensePlate.value &&
+                          els.spot.value && els.entryTime.value && els.duration.value;
+
+            els.parkBtn.disabled = !isValid;
+
+            if (els.vehicleType.value && els.duration.value) {
+                const rate = state.rates[els.vehicleType.value];
+                const hours = parseInt(els.duration.value) || 0;
+                const fee = rate * hours;
+                els.priceInfo.textContent = `Parking fee: $${fee.toFixed(2)} ($${rate}/hour × ${hours} hours)`;
+            } else {
+                els.priceInfo.textContent = 'Select vehicle type and duration to see price';
+            }
+
+            return isValid;
+        }
+
+        function updateStats() {
+            const counts = Object.values(state.spots).reduce((acc, spot) => {
+                acc[spot.status]++; return acc;
+            }, {available: 0, occupied: 0, reserved: 0});
+
+            els.availableCount.textContent = counts.available;
+            els.occupiedCount.textContent = counts.occupied;
+            els.reservedCount.textContent = counts.reserved;
+            els.revenue.textContent = `$${state.revenue.toFixed(2)}`;
+        }
+
+        function parkVehicle() {
+            if (!validateForm()) return;
+
+            const spotId = parseInt(els.spot.value);
+            const vehicleType = els.vehicleType.value;
+            const licensePlate = els.licensePlate.value;
+            const entryTime = els.entryTime.value;
+            const duration = parseInt(els.duration.value);
+            const rate = state.rates[vehicleType];
+
+            state.spots[spotId] = {
+                id: spotId, status: 'occupied', vehicleType, licensePlate,
+                entryTime, duration, rate
+            };
+
+            renderSpots();
+            updateSpotDropdown();
+            updateStats();
+
+            // Reset form
+            els.vehicleType.value = '';
+            els.licensePlate.value = '';
+            els.spot.value = '';
+            els.duration.value = '';
+            els.priceInfo.textContent = 'Select vehicle type and duration to see price';
+
+            showToast('Vehicle parked successfully!', 'success');
+        }
+
+        function checkoutVehicle() {
+            const id = state.currentModalSpot;
+            if (!id) return;
+
+            const spot = state.spots[id];
+            const fee = calculateFee(spot);
+            state.revenue += fee;
+
+            state.spots[id] = {
+                id, status: 'available', vehicleType: null,
+                licensePlate: null, entryTime: null, duration: null, rate: null
+            };
+
+            renderSpots();
+            updateSpotDropdown();
+            updateStats();
+            els.modal.style.display = 'none';
+            showToast(`Vehicle checked out. Fee: $${fee.toFixed(2)}`, 'success');
+        }
+
+        function searchSpots() {
+            const query = els.searchInput.value.trim().toLowerCase();
+            if (!query) return;
+
+            const spot = Object.values(state.spots).find(s =>
+                (s.licensePlate && s.licensePlate.toLowerCase().includes(query)) ||
+                s.id.toString() === query
+            );
+
+            if (spot) showSpotDetails(spot.id);
+            else showToast('No matching vehicle or spot found', 'error');
+        }
+
+        function setupEvents() {
+            // Get username from session if available, otherwise use default
+            try {
+                // Check if Flask session username is available
+                const sessionUsername = '{{ session.username }}';
+                if (sessionUsername && sessionUsername !== '{{ session.username }}') {
+                    state.user = sessionUsername;
+                }
+            } catch (e) {
+                console.log('Using default username');
+            }
+
+            els.username.textContent = state.user;
+            els.entryTime.value = new Date().toISOString().slice(0, 16);
+
+            // Add logout button event listener
+            els.logoutBtn.addEventListener('click', handleLogout);
+
+            els.vehicleType.addEventListener('change', validateForm);
+            [els.licensePlate, els.spot, els.entryTime, els.duration].forEach(el =>
+                el.addEventListener('input', validateForm));
+            els.parkBtn.addEventListener('click', parkVehicle);
+            $('close-modal').addEventListener('click', () => els.modal.style.display = 'none');
+            els.checkoutBtn.addEventListener('click', checkoutVehicle);
+            els.searchBtn.addEventListener('click', searchSpots);
+            els.searchInput.addEventListener('keypress', e => { if (e.key === 'Enter') searchSpots(); });
+            window.addEventListener('click', e => { if (e.target === els.modal) els.modal.style.display = 'none'; });
+        }
+
+        // Initialize application
+        (function init() {
+            initSpots();
+            renderSpots();
+            updateSpotDropdown();
+            updateStats();
+            setupEvents();
+        })();
+    </script>
+</body>
+</html>
