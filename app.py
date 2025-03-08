@@ -18,14 +18,17 @@ def init_users():
         "user": {"password": "user123"}
     }
 
-# Initialize slots data
+# Initialize slots data - all available initially
 def init_slots():
     return {str(slot_id): {
         "status": "available",
         "user": None,
+        "vehicle_type": None,
+        "license_plate": None,
         "entry_time": None,
-        "exit_time": None
-    } for slot_id in range(1, 31)}
+        "exit_time": None,
+        "duration": None
+    } for slot_id in range(1, 17)}
 
 # File operations with proper error handling and debug printing
 def load_data(file_path, init_function):
@@ -49,7 +52,7 @@ def load_data(file_path, init_function):
         return init_function()
 
 def save_data(file_path, data):
-    print(f"Attempting to save data to {file_path}: {data}")
+    print(f"Attempting to save data to {file_path}")
     try:
         with open(file_path, 'w') as f:
             json.dump(data, f, indent=4)
@@ -115,6 +118,16 @@ def reset_users():
     else:
         return jsonify({"error": "Failed to reset users"}), 500
 
+@app.route('/reset_slots', methods=['GET'])
+def reset_slots():
+    """Debug endpoint to reset slots file to defaults"""
+    slots = init_slots()
+    success = save_slots(slots)
+    if success:
+        return jsonify({"message": "Slots reset successfully", "slots": slots})
+    else:
+        return jsonify({"error": "Failed to reset slots"}), 500
+
 @app.route('/logout')
 def logout():
     session.pop('username', None)
@@ -142,19 +155,51 @@ def book_slot():
         return jsonify({"error": "Invalid slot ID"}), 400
         
     if slots[slot_id]["status"] != "available":
-        return jsonify({"error": "Slot already booked"}), 400
+        return jsonify({"error": "Slot already booked or reserved"}), 400
         
     slots[slot_id].update({
-        "status": "booked",
+        "status": "occupied",
         "user": session['username'],
+        "vehicle_type": data.get('vehicle_type'),
+        "license_plate": data.get('license_plate'),
         "entry_time": data.get('entry_time'),
-        "exit_time": data.get('exit_time')
+        "duration": data.get('duration')
     })
     
     if save_slots(slots):
         return jsonify({"success": True, "message": "Slot booked successfully"})
     else:
         return jsonify({"error": "Failed to save booking"}), 500
+
+@app.route('/api/reserve', methods=['POST'])
+def reserve_slot():
+    if 'username' not in session:
+        return jsonify({"error": "Not authenticated"}), 401
+
+    data = request.json
+    slot_id = data.get('slot_id')
+    
+    slots = load_slots()
+    
+    if slot_id not in slots:
+        return jsonify({"error": "Invalid slot ID"}), 400
+        
+    if slots[slot_id]["status"] != "available":
+        return jsonify({"error": "Slot already booked or reserved"}), 400
+        
+    slots[slot_id].update({
+        "status": "reserved",
+        "user": session['username'],
+        "vehicle_type": data.get('vehicle_type'),
+        "license_plate": data.get('license_plate'),
+        "entry_time": data.get('entry_time'),
+        "duration": data.get('duration')
+    })
+    
+    if save_slots(slots):
+        return jsonify({"success": True, "message": "Slot reserved successfully"})
+    else:
+        return jsonify({"error": "Failed to save reservation"}), 500
 
 @app.route('/api/release', methods=['POST'])
 def release_slot():
@@ -175,8 +220,11 @@ def release_slot():
     slots[slot_id].update({
         "status": "available",
         "user": None,
+        "vehicle_type": None,
+        "license_plate": None,
         "entry_time": None,
-        "exit_time": None
+        "exit_time": None,
+        "duration": None
     })
     
     if save_slots(slots):
@@ -192,4 +240,4 @@ if __name__ == '__main__':
         users = init_users()
         save_users(users)
     
-    app.run(debug=True)
+    app.run(debug=True,port=5000)
